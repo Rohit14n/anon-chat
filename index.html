@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AnonChat</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080c10;color:#c9d1d9;font-family:sans-serif;height:100vh;overflow:hidden}
+#boot{position:fixed;inset:0;background:#080c10;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:99}
+.logo{font-size:3rem;font-weight:700;color:#00e5ff;letter-spacing:.2em;font-family:monospace}
+.sub{color:#4a5568;font-size:.8rem;letter-spacing:.2em}
+.enter-btn{padding:14px 48px;background:transparent;border:2px solid #00e5ff;color:#00e5ff;font-size:1rem;cursor:pointer;border-radius:4px;letter-spacing:.1em;transition:all .2s}
+.enter-btn:hover{background:#00e5ff;color:#080c10}
+#app{display:none;height:100vh;grid-template-columns:240px 1fr}
+#app.show{display:grid}
+#sidebar{background:#0d1117;border-right:1px solid #1e2d3d;display:flex;flex-direction:column;padding:16px;gap:12px}
+.sid-logo{font-family:monospace;color:#00e5ff;font-weight:700;font-size:1rem;letter-spacing:.1em}
+.id-box{background:#111820;border:1px solid #1e2d3d;border-radius:8px;padding:10px 12px}
+.id-lbl{font-size:.6rem;color:#4a5568;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.id-val{font-family:monospace;color:#00e5ff;font-size:.8rem;font-weight:700;word-break:break-all}
+.room-btn{width:100%;padding:10px;background:transparent;border:1px solid #1e2d3d;color:#c9d1d9;border-radius:6px;cursor:pointer;text-align:left;font-size:.85rem;transition:background .15s}
+.room-btn:hover{background:#111820}
+.room-btn.active{background:#111820;border-color:#00e5ff;color:#00e5ff}
+.spacer{flex:1}
+.s-btn{width:100%;padding:10px;border-radius:6px;font-size:.75rem;cursor:pointer;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px;font-family:monospace}
+.s-btn-p{background:transparent;border:1px solid #00e5ff;color:#00e5ff}
+.s-btn-p:hover{background:#00e5ff;color:#080c10}
+.s-btn-g{background:transparent;border:1px solid #1e2d3d;color:#4a5568}
+.s-btn-g:hover{border-color:#c9d1d9;color:#c9d1d9}
+#main{display:flex;flex-direction:column;overflow:hidden}
+.chat-head{background:#0d1117;border-bottom:1px solid #1e2d3d;padding:14px 20px;display:flex;align-items:center;gap:10px}
+.chat-head h2{font-size:.95rem;font-weight:600}
+.online-pill{margin-left:auto;padding:4px 10px;background:#111820;border:1px solid #1e2d3d;border-radius:20px;font-size:.65rem;font-family:monospace;color:#4a5568}
+#msgs{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:3px}
+#msgs::-webkit-scrollbar{width:3px}
+#msgs::-webkit-scrollbar-thumb{background:#1e2d3d}
+.msg{display:flex;flex-direction:column;max-width:68%;animation:mi .2s ease}
+@keyframes mi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.msg.me{align-self:flex-end;align-items:flex-end}
+.msg.them{align-self:flex-start}
+.msg.sys{align-self:center}
+.alias{font-size:.62rem;font-family:monospace;color:#4a5568;margin-bottom:2px;padding:0 3px}
+.msg.me .alias{color:#00e5ff}
+.bubble{padding:8px 13px;border-radius:10px;font-size:.87rem;line-height:1.5;word-break:break-word}
+.msg.me .bubble{background:linear-gradient(135deg,#00b4d8,#0077b6);color:#fff;border-bottom-right-radius:3px}
+.msg.them .bubble{background:#111820;border:1px solid #1e2d3d;color:#c9d1d9;border-bottom-left-radius:3px}
+.msg.sys .bubble{background:transparent;color:#3d5a80;font-size:.7rem;font-family:monospace;font-style:italic;border:none;padding:1px 0}
+.ts{font-size:.58rem;color:#4a5568;font-family:monospace;margin-top:2px;padding:0 3px}
+#typing{min-height:20px;padding:2px 20px;font-size:.7rem;font-family:monospace;color:#4a5568;font-style:italic}
+.inp-bar{padding:12px 16px;border-top:1px solid #1e2d3d;background:#0d1117;display:flex;gap:8px;align-items:flex-end}
+#inp{flex:1;background:#111820;border:1px solid #1e2d3d;border-radius:8px;padding:10px 14px;color:#c9d1d9;font-size:.88rem;outline:none;resize:none;max-height:100px;line-height:1.4;font-family:sans-serif;transition:border-color .2s}
+#inp:focus{border-color:#00e5ff}
+#inp::placeholder{color:#4a5568}
+#sbtn{width:40px;height:40px;border-radius:8px;border:none;background:#00e5ff;color:#080c10;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-weight:700;transition:all .2s}
+#sbtn:hover{background:#00c8e0;transform:scale(1.05)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:200;display:none;align-items:center;justify-content:center}
+.overlay.open{display:flex}
+.modal{background:#0d1117;border:1px solid #1e2d3d;border-radius:12px;padding:24px 28px;width:340px;display:flex;flex-direction:column;gap:12px}
+.modal h3{font-family:monospace;font-size:.9rem;color:#00e5ff;letter-spacing:.1em}
+.modal p{font-size:.78rem;color:#4a5568;line-height:1.6}
+.modal input{width:100%;padding:10px 12px;background:#111820;border:1px solid #1e2d3d;border-radius:6px;color:#c9d1d9;font-family:monospace;font-size:.95rem;outline:none;letter-spacing:.15em;text-transform:uppercase}
+.modal input:focus{border-color:#00e5ff}
+.code-show{font-family:monospace;font-size:1.8rem;font-weight:700;color:#00e5ff;text-align:center;letter-spacing:.3em;padding:12px;background:#111820;border:1px solid #1e2d3d;border-radius:6px;cursor:pointer}
+.mbtns{display:flex;gap:8px;justify-content:flex-end}
+.mbtn{padding:8px 18px;border-radius:6px;font-family:monospace;font-size:.72rem;cursor:pointer;letter-spacing:.06em;text-transform:uppercase}
+.mbtn-c{background:transparent;border:1px solid #1e2d3d;color:#4a5568}
+.mbtn-c:hover{border-color:#c9d1d9;color:#c9d1d9}
+.mbtn-ok{background:#00e5ff;border:none;color:#080c10}
+.mbtn-ok:hover{background:#00c8e0}
+</style>
+</head>
+<body>
+
+<div id="boot">
+  <div class="logo">ANONCHAT</div>
+  <div class="sub">// NO ACCOUNT · NO PHONE · NO TRACE</div>
+  <button class="enter-btn" onclick="enterChat()">ENTER CHAT</button>
+</div>
+
+<div id="app">
+  <div id="sidebar">
+    <div class="sid-logo">ANONCHAT</div>
+    <div class="id-box">
+      <div class="id-lbl">Your Anonymous ID</div>
+      <div class="id-val" id="aliasEl">connecting...</div>
+    </div>
+    <div class="id-lbl" style="padding:4px 0">Public Rooms</div>
+    <button class="room-btn active" id="lobbyBtn" onclick="joinRoom('lobby')">🌐 Global Lobby <span id="lcount" style="float:right;font-size:.7rem;color:#4a5568">0</span></button>
+    <div class="spacer"></div>
+    <button class="s-btn s-btn-p" onclick="createRoom()">+ Create Private Room</button>
+    <button class="s-btn s-btn-g" onclick="showJoin()">→ Join Room by Code</button>
+  </div>
+  <div id="main">
+    <div class="chat-head">
+      <span id="roomIcon">🌐</span>
+      <h2 id="roomName">Global Lobby</h2>
+      <div class="online-pill"><span id="onlineCount">0</span> online</div>
+    </div>
+    <div id="msgs"></div>
+    <div id="typing"></div>
+    <div class="inp-bar">
+      <textarea id="inp" rows="1" placeholder="Type a message… (Enter to send)" maxlength="500"></textarea>
+      <button id="sbtn">➤</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div class="overlay" id="createOverlay">
+  <div class="modal">
+    <h3>🔐 PRIVATE ROOM CREATED</h3>
+    <p>Share this code. Room disappears when everyone leaves.</p>
+    <div class="code-show" id="codeShow" onclick="copyCode()">——</div>
+    <p style="font-size:.65rem;text-align:center">Click code to copy</p>
+    <div class="mbtns">
+      <button class="mbtn mbtn-c" onclick="closeCreate()">Close</button>
+      <button class="mbtn mbtn-ok" onclick="joinCreated()">Join Room</button>
+    </div>
+  </div>
+</div>
+
+<!-- Join Modal -->
+<div class="overlay" id="joinOverlay">
+  <div class="modal">
+    <h3>→ JOIN PRIVATE ROOM</h3>
+    <p>Enter the 6-character room code.</p>
+    <input type="text" id="joinInp" placeholder="XXXXXX" maxlength="6" onkeydown="if(event.key==='Enter')doJoin()"/>
+    <div class="mbtns">
+      <button class="mbtn mbtn-c" onclick="document.getElementById('joinOverlay').classList.remove('open')">Cancel</button>
+      <button class="mbtn mbtn-ok" onclick="doJoin()">Join</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var socket = io();
+var myAlias = '';
+var curRoom = null;
+var pendingCode = null;
+var typingTimers = {};
+
+function enterChat() {
+  document.getElementById('boot').style.display = 'none';
+  document.getElementById('app').classList.add('show');
+  joinRoom('lobby');
+}
+
+socket.on('identity', function(d) {
+  myAlias = d.alias;
+  document.getElementById('aliasEl').textContent = d.alias;
+});
+
+socket.on('room_joined', function(d) {
+  curRoom = d.roomId;
+  document.getElementById('roomName').textContent = d.roomName;
+  document.getElementById('roomIcon').textContent = d.roomId === 'lobby' ? '🌐' : '🔐';
+  document.getElementById('onlineCount').textContent = d.userCount;
+  var ms = document.getElementById('msgs');
+  ms.innerHTML = '';
+  (d.history || []).forEach(renderMsg);
+  ms.scrollTop = ms.scrollHeight;
+  document.getElementById('lobbyBtn').classList.toggle('active', d.roomId === 'lobby');
+});
+
+socket.on('message', function(msg) {
+  renderMsg(msg);
+  var ms = document.getElementById('msgs');
+  ms.scrollTop = ms.scrollHeight;
+});
+
+socket.on('user_count', function(d) {
+  if (d.roomId === curRoom) document.getElementById('onlineCount').textContent = d.count;
+  if (d.roomId === 'lobby') document.getElementById('lcount').textContent = d.count;
+});
+
+socket.on('typing', function(d) {
+  if (d.alias === myAlias) return;
+  var el = document.getElementById('typing');
+  el.textContent = d.alias + ' is typing…';
+  clearTimeout(typingTimers[d.alias]);
+  typingTimers[d.alias] = setTimeout(function() { el.textContent = ''; }, 2500);
+});
+
+socket.on('room_created', function(d) {
+  pendingCode = d.roomId;
+  document.getElementById('codeShow').textContent = d.roomId;
+  document.getElementById('createOverlay').classList.add('open');
+});
+
+function renderMsg(msg) {
+  var ms = document.getElementById('msgs');
+  var div = document.createElement('div');
+  if (msg.alias === 'system') {
+    div.className = 'msg sys';
+    div.innerHTML = '<div class="bubble">' + esc(msg.text) + '</div>';
+  } else {
+    div.className = 'msg ' + (msg.alias === myAlias ? 'me' : 'them');
+    var t = new Date(msg.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    div.innerHTML = '<div class="alias">' + esc(msg.alias) + '</div><div class="bubble">' + esc(msg.text) + '</div><div class="ts">' + t + '</div>';
+  }
+  ms.appendChild(div);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function joinRoom(id) {
+  socket.emit('join_room', {roomId: id});
+}
+
+function sendMsg() {
+  var inp = document.getElementById('inp');
+  var t = inp.value.trim();
+  if (!t || !curRoom) return;
+  socket.emit('send_message', {text: t});
+  inp.value = '';
+  inp.style.height = 'auto';
+}
+
+document.getElementById('sbtn').onclick = sendMsg;
+
+document.getElementById('inp').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+});
+
+document.getElementById('inp').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+  socket.emit('typing');
+});
+
+function createRoom() { socket.emit('create_room'); }
+function closeCreate() { document.getElementById('createOverlay').classList.remove('open'); }
+function joinCreated() { closeCreate(); if(pendingCode) joinRoom(pendingCode); }
+function copyCode() {
+  navigator.clipboard.writeText(pendingCode).catch(function(){});
+  document.getElementById('codeShow').textContent = 'COPIED!';
+  setTimeout(function(){ document.getElementById('codeShow').textContent = pendingCode; }, 1200);
+}
+function showJoin() {
+  document.getElementById('joinInp').value = '';
+  document.getElementById('joinOverlay').classList.add('open');
+  document.getElementById('joinInp').focus();
+}
+function doJoin() {
+  var code = document.getElementById('joinInp').value.trim().toUpperCase();
+  if (code.length >= 4) {
+    document.getElementById('joinOverlay').classList.remove('open');
+    joinRoom(code);
+  }
+}
+
+document.querySelectorAll('.overlay').forEach(function(el) {
+  el.addEventListener('click', function(e) { if(e.target===el) el.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
