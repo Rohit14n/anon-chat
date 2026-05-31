@@ -65,14 +65,14 @@ io.on('connection', (socket) => {
 
     // Join new room
     socket.join(roomId);
-    room.users.add(socket.id);
+    room.users.add(socket.id)
     user.roomId = roomId;
 
     // Send recent history (last 50 msgs)
     socket.emit('room_joined', {
       roomId,
       roomName: room.name,
-      history: room.messages.slice(-50),
+      history: [],
       userCount: room.users.size
     });
 
